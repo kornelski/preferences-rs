@@ -1,0 +1,9 @@
+[package]
+name = "user_prefs"
+version = "0.1.0"
+authors = ["Andy Barron <AndrewLBarron@gmail.com>"]
+
+[dependencies]
+serde = "*"
+serde_json = "*"
+serde_macros = "*"
