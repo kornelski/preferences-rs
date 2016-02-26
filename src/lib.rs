@@ -1,4 +1,5 @@
 // TODO add documentation!
+// TODO choose a license
 
 #![feature(custom_derive, plugin)]
 #![plugin(serde_macros)]
