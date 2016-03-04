@@ -3,6 +3,13 @@ name = "preferences"
 version = "0.1.0"
 authors = ["Andy Barron <AndrewLBarron@gmail.com>"]
 
+description = "Read and write user-specific application data"
+documentation = "https://andybarron.github.io/preferences-rs"
+repository = "https://github.com/AndyBarron/preferences-rs"
+readme = "README.md"
+keywords = ["preferences", "user", "data", "persistent", "application", "storage"]
+license = "MIT"
+
 [dependencies]
 serde = "*"
 serde_json = "*"
