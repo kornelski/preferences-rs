@@ -7,7 +7,7 @@ description = "Read and write user-specific application data"
 documentation = "https://andybarron.github.io/preferences-rs"
 repository = "https://github.com/AndyBarron/preferences-rs"
 readme = "README.md"
-keywords = ["preferences", "user", "data", "persistent", "application", "storage"]
+keywords = ["preferences", "user", "data", "persistent", "storage"]
 license = "MIT"
 
 [dependencies]
