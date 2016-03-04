@@ -11,6 +11,6 @@ keywords = ["preferences", "user", "data", "persistent", "storage"]
 license = "MIT"
 
 [dependencies]
-serde = "*"
-serde_json = "*"
-serde_macros = "*"
+serde = "0.7.*"
+serde_json = "0.7.*"
+serde_macros = "0.7.*"
