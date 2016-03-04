@@ -1,4 +1,3 @@
-// TODO choose a license
 //! *Read and write user-specific application data*
 //!
 //! This crate allows Rust developers to store and retrieve user-local preferences and other
@@ -280,19 +279,21 @@ fn get_prefs_base_path() -> Option<PathBuf> {
     })
 }
 
-// TODO clean up strings and error messages
 fn path_buf_from_name(name: &str) -> Result<PathBuf, IoError> {
-    if name.contains("../") || name.contains("/..") {
-        return Result::Err(IoError::new(ErrorKind::Other, "Invalid PrefMap name"));
+
+    let msg_not_found = "Could not find home directory for user data storage";
+    let err_not_found = IoError::new(ErrorKind::NotFound, msg_not_found);
+
+    let msg_bad_name = "Invalid preferences name: ".to_owned() + name;
+    let err_bad_name = Result::Err(IoError::new(ErrorKind::Other, msg_bad_name));
+
+    if name.starts_with("../") || name.ends_with("/..") || name.contains("/../") {
+        return err_bad_name;
     }
-    let mut base_path = try!(get_prefs_base_path().ok_or(IoError::new(ErrorKind::NotFound,
-                                                                      "Could not find user \
-                                                                       home directory for \
-                                                                       preferences read/write")));
+    let mut base_path = try!(get_prefs_base_path().ok_or(err_not_found));
     let name_path = Path::new(name);
     if !name_path.is_relative() {
-        return Result::Err(IoError::new(ErrorKind::Other,
-                                        "Invalid preferences name: ".to_owned() + name));
+        return err_bad_name;
     }
     base_path.push(name_path);
     Result::Ok(base_path)
