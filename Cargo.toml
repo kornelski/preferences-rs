@@ -1,5 +1,5 @@
 [package]
-name = "user_prefs"
+name = "preferences"
 version = "0.1.0"
 authors = ["Andy Barron <AndrewLBarron@gmail.com>"]
 
