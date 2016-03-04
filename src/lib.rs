@@ -8,30 +8,28 @@ extern crate serde;
 extern crate serde_json;
 
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::fs::{File, create_dir_all};
 use std::io::{Error, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use serde::{Serialize, Deserialize};
 
 #[cfg(target_os="macos")]
-static PREFS_DIR_NAME: &'static str = "Library/Preferences";
+static PREFS_DIR_PATH: &'static str = "Library/Preferences";
 #[cfg(all(unix, not(target_os="macos")))]
-static PREFS_DIR_NAME: &'static str = ".config";
+static PREFS_DIR_PATH: &'static str = ".config";
 #[cfg(windows)]
-static PREFS_DIR_NAME: &'static str = "AppData/Roaming";
+static PREFS_DIR_PATH: &'static str = "AppData/Roaming";
+
+pub type PreferencesMap<T=String> = HashMap<String, T>;
 
 pub trait PreferencesTrait {
-    type Entry: Serialize + Deserialize;
     fn save<S>(&self, path: S) -> Result<(), serde_json::error::Error> where S: AsRef<str>;
     fn load<S>(&mut self, path: S) -> Result<(), serde_json::error::Error> where S: AsRef<str>;
 }
 
-impl<K, V> PreferencesTrait for HashMap<K, V>
-    where K: Serialize + Deserialize + Eq + Hash,
-          V: Serialize + Deserialize
+impl<T> PreferencesTrait for T
+    where T: Serialize + Deserialize
 {
-    type Entry = V;
     fn save<S>(&self, path: S) -> Result<(), serde_json::error::Error>
         where S: AsRef<str>
     {
@@ -57,11 +55,12 @@ impl<K, V> PreferencesTrait for HashMap<K, V>
 
 fn get_prefs_base_path() -> Option<PathBuf> {
     std::env::home_dir().map(|mut dir| {
-        dir.push(PREFS_DIR_NAME);
+        dir.push(PREFS_DIR_PATH);
         dir
     })
 }
 
+// TODO clean up strings and error messages
 fn path_buf_from_name(name: &str) -> Result<PathBuf, Error> {
     if name.contains("../") || name.contains("/..") {
         return Result::Err(Error::new(ErrorKind::Other, "Invalid PrefMap name"));
@@ -81,17 +80,17 @@ fn path_buf_from_name(name: &str) -> Result<PathBuf, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::PreferencesTrait;
+    use {PreferencesTrait, PreferencesMap};
     static TEST_PREFIX: &'static str = "rust_user_prefs_test";
     fn gen_test_name(name: &str) -> String {
         TEST_PREFIX.to_owned() + "/" + name
     }
-    fn gen_sample_prefs() -> PrefMap {
-        let mut prefs = PrefMap::new();
-        prefs.insert("foo", "bar");
-        prefs.insert("age", 23u32);
-        prefs.insert("PI", 3.0);
-        prefs.insert("offset", -9);
+    fn gen_sample_prefs() -> PreferencesMap<String> {
+        let mut prefs = PreferencesMap::new();
+        prefs.insert("foo".into(), "bar".into());
+        prefs.insert("age".into(), "23".into());
+        prefs.insert("PI".into(), "3.14".into());
+        prefs.insert("offset".into(), "-9".into());
         prefs
     }
     #[test]
@@ -101,9 +100,10 @@ mod tests {
         let save_result = sample.save(&name);
         println!("Save result: {:?}", save_result);
         assert!(save_result.is_ok());
-        let load_result = PrefMap::load(&name);
+        let mut loaded_map = PreferencesMap::new();
+        let load_result = loaded_map.load(&name);
         println!("Load result: {:?}", load_result);
         assert!(load_result.is_ok());
-        assert_eq!(load_result.unwrap(), sample);
+        assert_eq!(loaded_map, sample);
     }
 }
