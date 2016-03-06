@@ -1,6 +1,6 @@
 [package]
 name = "preferences"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Andy Barron <AndrewLBarron@gmail.com>"]
 
 description = "Read and write user-specific application data (in stable Rust)"
@@ -10,11 +10,5 @@ readme = "README.md"
 keywords = ["preferences", "user", "data", "persistent", "storage"]
 license = "MIT"
 
-[features]
-default = []
-
 [dependencies]
 rustc-serialize = "^0.3.18"
-# to enable clippy lints:
-# cargo build --features clippy
-clippy = { version = "^0.0.46", optional = true }
