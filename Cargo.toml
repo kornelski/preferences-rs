@@ -1,16 +1,20 @@
 [package]
 name = "preferences"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Andy Barron <AndrewLBarron@gmail.com>"]
 
-description = "Read and write user-specific application data"
+description = "Read and write user-specific application data (in stable Rust)"
 documentation = "https://andybarron.github.io/preferences-rs"
 repository = "https://github.com/AndyBarron/preferences-rs"
 readme = "README.md"
 keywords = ["preferences", "user", "data", "persistent", "storage"]
 license = "MIT"
 
+[features]
+default = []
+
 [dependencies]
-serde = "0.7.*"
-serde_json = "0.7.*"
-serde_macros = "0.7.*"
+rustc-serialize = "^0.3.18"
+# to enable clippy lints:
+# cargo build --features clippy
+clippy = { version = "^0.0.46", optional = true }

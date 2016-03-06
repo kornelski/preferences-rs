@@ -5,8 +5,10 @@
 //!
 //! Though it was originally inspired by Java's convenient
 //! [Preferences API](https://docs.oracle.com/javase/8/docs/api/java/util/prefs/Preferences.html),
-//! this crate is more flexible; any type that implements `Serialize` and `Deserialize` (from the
-//! wonderful [`serde`](https://crates.io/crates/serde)) can be stored and retrieved as user data!
+//! this crate is more flexible; any type that implements
+//! [`rustc-serialize`][rustc-serialize-api]'s `Encodable` and `Decodable`
+//! traits can be stored and retrieved as user data! Thankfully, implementing those traits is
+//! trivial; just use `#[derive(RustcEncodable, RustcDecodable)`.
 //!
 //! # Usage
 //! For convenience, the type [`PreferencesMap<T>`](type.PreferencesMap.html) is provided. (It's
@@ -17,54 +19,62 @@
 //! This will allow you to seamlessly save and load user data with the `save(..)` and `load(..)`
 //! methods on `PreferencesTrait`.
 //!
+//! # Roadmap
+//! This crate aims to provide a convenient API for both stable and nightly Rust, which is why
+//! it currently uses [`rustc-serialize`][rustc-serialize-api] instead of the more recent
+//! [`serde`][serde-api] library. In the distant future, when compiler plugins are stabilized
+//! and `serde` is available in stable Rust, this library will migrate to `serde`. This will be
+//! a breaking change (and will update the semantic version number accordingly so that your
+//! builds don't break). At that point, updating should be dead simple; you'll just have to
+//! replace `#[derive(RustcEncodable, RustcDecodable)` with `#[derive(Serialize, Deserialize)`,
+//! and only if you store custom data types in your user data.
+//!
 //! # Basic example
 //! ```
 //! extern crate preferences;
 //! use preferences::{PreferencesMap, PreferencesTrait};
-//! 
+//!
 //! fn main() {
-//! 
+//!
 //!     // Create a new preferences key-value map
 //!     // (Under the hood: HashMap<String, String>)
 //!     let mut faves: PreferencesMap<String> = PreferencesMap::new();
-//! 
+//!
 //!     // Edit the preferences (std::collections::HashMap)
 //!     faves.insert("color".into(), "blue".into());
 //!     faves.insert("programming language".into(), "Rust".into());
-//! 
+//!
 //!     // Store the user's preferences
 //!     let prefs_key = "preferences-rs/examples/faves";
 //!     faves.save(prefs_key);
-//! 
+//!
 //!     // ... Then do some stuff ...
-//! 
+//!
 //!     // Retrieve the user's preferences
 //!     let mut loaded_faves = PreferencesMap::new();
 //!     let load_result = loaded_faves.load(prefs_key);
 //!     assert!(load_result.is_ok());
 //!     assert_eq!(loaded_faves, faves);
-//! 
+//!
 //! }
 //! ```
 //!
 //! # Using custom data types
 //! ```
-//! #![feature(custom_derive, plugin)]
-//! #![plugin(serde_macros)]
-//! extern crate serde;
+//! extern crate rustc_serialize;
 //! extern crate preferences;
 //! use preferences::{PreferencesMap, PreferencesTrait};
-//! 
-//! #[derive(Serialize, Deserialize, PartialEq, Debug)]
+//!
+//! #[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
 //! struct PlayerData {
 //!     level: u32,
 //!     health: f32,
 //! }
-//! 
+//!
 //! fn main() {
-//! 
+//!
 //!     let player = PlayerData{level: 2, health: 0.75};
-//! 
+//!
 //!     let prefs_key = "preferences-rs/examples/player";
 //!     player.save(prefs_key);
 //!
@@ -72,27 +82,25 @@
 //!     let load_result = loaded_player.load(prefs_key);
 //!     assert!(load_result.is_ok());
 //!     assert_eq!(loaded_player, player);
-//! 
+//!
 //! }
 //! ```
 //!
 //! # Using custom data types with `PreferencesMap`
 //! ```
-//! #![feature(custom_derive, plugin)]
-//! #![plugin(serde_macros)]
-//! extern crate serde;
+//! extern crate rustc_serialize;
 //! extern crate preferences;
 //! use preferences::{PreferencesMap, PreferencesTrait};
-//! 
-//! #[derive(Serialize, Deserialize, PartialEq, Debug)]
+//!
+//! #[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
 //! struct Point(f32, f32);
-//! 
+//!
 //! fn main() {
-//! 
+//!
 //!     let mut places = PreferencesMap::new();
 //!     places.insert("treasure".into(), Point(1.0, 1.0));
 //!     places.insert("home".into(), Point(-1.0, 6.6));
-//! 
+//!
 //!     let prefs_key = "preferences-rs/examples/places";
 //!     places.save(prefs_key);
 //!
@@ -100,30 +108,28 @@
 //!     let load_result = loaded_places.load(prefs_key);
 //!     assert!(load_result.is_ok());
 //!     assert_eq!(loaded_places, places);
-//! 
+//!
 //! }
 //! ```
 //!
 //! # Using custom data types with serializable containers
 //! ```
-//! #![feature(custom_derive, plugin)]
-//! #![plugin(serde_macros)]
-//! extern crate serde;
+//! extern crate rustc_serialize;
 //! extern crate preferences;
 //! use preferences::{PreferencesMap, PreferencesTrait};
-//! 
-//! #[derive(Serialize, Deserialize, PartialEq, Debug)]
+//!
+//! #[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
 //! struct Point(usize, usize);
-//! 
+//!
 //! fn main() {
-//! 
+//!
 //!     let square = vec![
 //!         Point(0,0),
 //!         Point(1,0),
 //!         Point(1,1),
 //!         Point(0,1),
 //!     ];
-//! 
+//!
 //!     let prefs_key = "preferences-rs/examples/square";
 //!     square.save(prefs_key);
 //!
@@ -131,7 +137,7 @@
 //!     let load_result = loaded_square.load(prefs_key);
 //!     assert!(load_result.is_ok());
 //!     assert_eq!(loaded_square, square);
-//! 
+//!
 //! }
 //! ```
 //!
@@ -147,6 +153,7 @@
 //!
 //! * Human-readable and self-describing
 //! * More compact than e.g. XML
+//! * Better adoption rates and language compatibility than e.g. TOML
 //! * Not reliant on a consistent memory layout like e.g. binary
 //!
 //! You could, of course, implement `PreferencesTrait` yourself and store your user data in
@@ -154,19 +161,22 @@
 //! library. &#128522;
 //!
 //! [hashmap-api]: https://doc.rust-lang.org/nightly/std/collections/struct.HashMap.html
+//! [rustc-serialize-api]: https://crates.io/crates/rustc-serialize
+//! [serde-api]: https://crates.io/crates/serde
 
-#![feature(custom_derive, plugin)]
-#![plugin(serde_macros)]
 #![warn(missing_docs)]
+#![cfg_attr(feature="clippy", feature(plugin))]
+#![cfg_attr(feature="clippy", plugin(clippy))]
 
-extern crate serde;
-extern crate serde_json;
+extern crate rustc_serialize;
 
+use rustc_serialize::{Encodable, Decodable};
+use rustc_serialize::json::{self, EncoderError, DecoderError};
 use std::collections::HashMap;
 use std::fs::{File, create_dir_all};
-use std::io::{ErrorKind, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
-use serde::{Serialize, Deserialize};
+use std::string::FromUtf8Error;
 
 type IoError = std::io::Error;
 
@@ -178,47 +188,63 @@ static PREFS_DIR_PATH: &'static str = ".config";
 static PREFS_DIR_PATH: &'static str = "AppData/Roaming";
 
 /// Generic key-value store for user data.
-/// 
+///
 /// This is actually a wrapper type around [`std::collections::HashMap<String, T>`][hashmap-api]
 /// (with `T` defaulting to `String`), so use the `HashMap` API methods to access and change user
 /// data in memory.
-/// 
+///
 /// To save or load user data, use the methods defined for
 /// [`PreferencesTrait`](trait.PreferencesTrait.html), which will be automatically implemented for
-/// `PreferencesMap<T>` as long as `T` implements [`serde`][serde-crate]'s `Serialize` and
-/// `Deserialize`.
-/// 
+/// `PreferencesMap<T>` as long as `T` is serializable. (See the
+/// [module documentation](index.html) for examples and more details.)
+///
 /// [hashmap-api]: https://doc.rust-lang.org/nightly/std/collections/struct.HashMap.html
-/// [serde-crate]: https://crates.io/crates/serde
 pub type PreferencesMap<T = String> = HashMap<String, T>;
 
 /// Error type representing the errors that can occur when saving or loading user data.
 #[derive(Debug)]
 pub enum PreferencesError {
-    /// An error occurred during JSON (de)serialization.
-    SerializationError(serde_json::error::Error),
+    /// An error occurred during JSON (serialization.
+    Serialize(EncoderError),
+    /// An error occurred during JSON deserialization.
+    Deserialize(DecoderError),
     /// An error occurred during file I/O.
-    IoError(std::io::Error),
+    Io(std::io::Error),
 }
 
-impl From<serde_json::error::Error> for PreferencesError {
-    fn from(e: serde_json::error::Error) -> Self {
-        PreferencesError::SerializationError(e)
+impl From<EncoderError> for PreferencesError {
+    fn from(e: EncoderError) -> Self {
+        PreferencesError::Serialize(e)
+    }
+}
+
+impl From<DecoderError> for PreferencesError {
+    fn from(e: DecoderError) -> Self {
+        PreferencesError::Deserialize(e)
+    }
+}
+
+impl From<FromUtf8Error> for PreferencesError {
+    fn from(_: FromUtf8Error) -> Self {
+        let kind = ErrorKind::InvalidData;
+        let msg = "Preferences file contained invalid UTF-8";
+        let err = IoError::new(kind, msg);
+        PreferencesError::Io(err)
     }
 }
 
 impl From<std::io::Error> for PreferencesError {
     fn from(e: std::io::Error) -> Self {
-        PreferencesError::IoError(e)
+        PreferencesError::Io(e)
     }
 }
 
 /// Trait for types that can be saved & loaded as user data.
 ///
-/// This type is automatically implemented for any type `T` which implements both `Serialize` and
-/// `Deserialize`. However, you are encouraged to use the provided type,
+/// This type is automatically implemented for any type `T` which implements both `Encodable` and
+/// `Decodable` (from `rustc-serialize`). However, you are encouraged to use the provided type,
 /// [`PreferencesMap`](type.PreferencesMap.html).
-/// 
+///
 /// The `path` parameter of `save(..)` and `load(..)` should be a valid, relative file path. It is
 /// *highly* recommended that you use the format
 /// `[company or author]/[application name]/[data description]`. For example, a game might use
@@ -228,7 +254,7 @@ impl From<std::io::Error> for PreferencesError {
 /// * `fun-games-inc/awesome-game-2/saves`
 pub trait PreferencesTrait {
     /// Saves the current state of this object. Implementation is platform-dependent, but the data
-    /// will be local to the active user. For more details, see 
+    /// will be local to the active user. For more details, see
     /// [the module documentation](index.html).
     ///
     /// # Failures
@@ -247,28 +273,30 @@ pub trait PreferencesTrait {
 }
 
 impl<T> PreferencesTrait for T
-    where T: Serialize + Deserialize
+    where T: Encodable + Decodable
 {
     fn save<S>(&self, path: S) -> Result<(), PreferencesError>
         where S: AsRef<str>
     {
         let path = try!(path_buf_from_name(path.as_ref()));
-        path.parent().map(|parent| create_dir_all(parent));
+        path.parent().map(create_dir_all);
         let mut file = try!(File::create(path));
-        let result = serde_json::to_writer(&mut file, self);
-        if result.is_ok() {
-            try!(file.flush());
-        }
-        result.map_err(|e| e.into())
+        let encoded = try!(json::encode(self));
+        try!(file.write_all(encoded.as_bytes()));
+        try!(file.flush());
+        Ok(())
     }
     fn load<S>(&mut self, path: S) -> Result<(), PreferencesError>
         where S: AsRef<str>
     {
         let path = try!(path_buf_from_name(path.as_ref()));
-        let file = try!(File::open(path));
-        serde_json::from_reader(file).map_err(|e| e.into()).map(|val| {
-            *self = val;
-        })
+        let mut file = try!(File::open(path));
+        let mut bytes = Vec::new();
+        try!(file.read_to_end(&mut bytes));
+        let encoded = try!(String::from_utf8(bytes));
+        let new_self = try!(json::decode(&encoded));
+        *self = new_self;
+        Ok(())
     }
 }
 
