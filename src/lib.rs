@@ -168,6 +168,13 @@
 
 extern crate rustc_serialize;
 
+#[cfg(windows)]
+extern crate winapi;
+#[cfg(windows)]
+extern crate shell32;
+#[cfg(windows)]
+extern crate ole32;
+
 use rustc_serialize::{Encodable, Decodable};
 use rustc_serialize::json::{self, EncoderError, DecoderError};
 use std::collections::HashMap;
@@ -201,8 +208,96 @@ fn get_prefs_base_path() -> Option<PathBuf> {
 }
 
 #[cfg(windows)]
+mod windows {
+    use std::slice;
+    use std::ptr;
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+        
+    use winapi;
+    use shell32;
+    use ole32;
+    
+    // This value is not currently exported by any of the winapi crates, but
+    // its exact value is specified in the MSDN documentation.
+    // https://msdn.microsoft.com/en-us/library/dd378457.aspx#FOLDERID_RoamingAppData
+    #[allow(non_upper_case_globals)]
+    static FOLDERID_RoamingAppData: winapi::GUID = winapi::GUID {
+        Data1: 0x3EB685DB,
+        Data2: 0x65F9,
+        Data3: 0x4CF6,
+        Data4: [0xA0, 0x3A, 0xE3, 0xEF, 0x65, 0x72, 0x9F, 0x3D]
+    };
+
+    // Retrieves the OsString for AppData using the proper Win32
+    // function without relying on environment variables
+    pub fn get_appdata() -> Result<OsString, ()> {
+        unsafe {
+            // A Wide c-style string pointer which will be filled by
+            // SHGetKnownFolderPath. We are responsible for freeing
+            // this value if the call succeeds
+            let mut raw_path: winapi::PWSTR = ptr::null_mut();
+            
+            // Get RoamingAppData's path
+            let result = shell32::SHGetKnownFolderPath(
+                &FOLDERID_RoamingAppData,
+                0, // No extra flags are neccesary
+                ptr::null_mut(), // user context, null = current user
+                &mut raw_path,
+            );
+            
+            // SHGetKnownFolderPath returns an HRESULT, which represents
+            // failure states by being negative. This should not fail, but
+            // we should be prepared should it fail some day.
+            if result < 0 {
+                return Err(());
+            }
+            
+            // Since SHGetKnownFolderPath succeeded, we must ensure that we
+            // free the memory even if allocating an OsString fails later on.
+            // To do this, we will use a nested struct with a Drop implementation
+            let _cleanup = {
+                struct FreeStr(winapi::PWSTR);
+                impl Drop for FreeStr {
+                    fn drop(&mut self) {
+                        unsafe { ole32::CoTaskMemFree(self.0 as *mut _) };
+                    }
+                }
+                FreeStr(raw_path)
+            };
+            
+            // libstd does not contain a wide-char strlen as far as I know,
+            // so we'll have to make do calculating it ourselves.
+            let mut strlen = 0;
+            for i in 0.. {
+                if *raw_path.offset(i) == 0 {
+                    // isize -> usize is always safe here because we know
+                    // that an isize can hold the positive length, as each
+                    // char is 2 bytes long, and so could only be half of
+                    // the memory space even theoretically.
+                    strlen = i as usize;
+                    break;
+                }
+            }
+            
+            // Now that we know the length of the string, we can
+            // convert it to a &[u16]
+            let wpath = slice::from_raw_parts(raw_path, strlen);
+            // Window's OsStringExt has the function from_wide for
+            // converting a &[u16] into an OsString.
+            let path = OsStringExt::from_wide(wpath);
+            
+            // raw_path will be automatically freed by _cleanup, regardless of
+            // whether any of the previous functions panic.
+            
+            Ok(path)
+        }
+    }
+}
+
+#[cfg(windows)]
 fn get_prefs_base_path() -> Option<PathBuf> {
-    match env::var("APPDATA") {
+    match windows::get_appdata() {
         Ok(path_str) => Some(path_str.into()),
         Err(..) => {
             env::home_dir().map(|mut dir| {
