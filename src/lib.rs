@@ -208,12 +208,16 @@ fn get_prefs_base_path() -> Option<PathBuf> {
 }
 
 #[cfg(windows)]
-fn get_prefs_base_path() -> Option<PathBuf> {
+mod windows {
     use std::slice;
     use std::ptr;
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
-
+        
+    use winapi;
+    use shell32;
+    use ole32;
+    
     // This value is not currently exported by any of the winapi crates, but
     // its exact value is specified in the MSDN documentation.
     // https://msdn.microsoft.com/en-us/library/dd378457.aspx#FOLDERID_RoamingAppData
@@ -227,7 +231,7 @@ fn get_prefs_base_path() -> Option<PathBuf> {
 
     // Retrieves the OsString for AppData using the proper Win32
     // function without relying on environment variables
-    fn get_appdata() -> Result<OsString, ()> {
+    pub fn get_appdata() -> Result<OsString, ()> {
         unsafe {
             // A Wide c-style string pointer which will be filled by
             // SHGetKnownFolderPath. We are responsible for freeing
@@ -289,8 +293,11 @@ fn get_prefs_base_path() -> Option<PathBuf> {
             Ok(path)
         }
     }
+}
 
-    match get_appdata() {
+#[cfg(windows)]
+fn get_prefs_base_path() -> Option<PathBuf> {
+    match windows::get_appdata() {
         Ok(path_str) => Some(path_str.into()),
         Err(..) => {
             env::home_dir().map(|mut dir| {
