@@ -145,9 +145,9 @@
 //! Data is written to flat files under the active user's home directory in a location specific to
 //! the operating system.
 //!
-//! * Mac OS X: `~/Library/Preferences`
-//! * Other Unix/Linux: `~/.config`
-//! * Windows: `%USERPROFILE%\AppData\Roaming` (a.k.a. `%APPDATA%`)
+//! * Mac OS X: `~/Library/Application Support`
+//! * Other Unix/Linux: `$XDG_DATA_HOME`, defaulting to `~/.local/share` if not set
+//! * Windows: `%APPDATA%`, defaulting to `<std::env::home_dir()>\AppData\Roaming` if not set
 //!
 //! The data is stored in JSON format. This has several advantages:
 //!
@@ -171,6 +171,7 @@ extern crate rustc_serialize;
 use rustc_serialize::{Encodable, Decodable};
 use rustc_serialize::json::{self, EncoderError, DecoderError};
 use std::collections::HashMap;
+use std::env;
 use std::fs::{File, create_dir_all};
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
@@ -179,11 +180,39 @@ use std::string::FromUtf8Error;
 type IoError = std::io::Error;
 
 #[cfg(target_os="macos")]
-static PREFS_DIR_PATH: &'static str = "Library/Preferences";
+fn get_prefs_base_path() -> Option<PathBuf> {
+    env::home_dir().map(|mut dir| {
+        dir.push("Library/Application Support");
+        dir
+    })
+}
+
 #[cfg(all(unix, not(target_os="macos")))]
-static PREFS_DIR_PATH: &'static str = ".config";
+fn get_prefs_base_path() -> Option<PathBuf> {
+    match env::var("XDG_DATA_HOME") {
+        Ok(path_str) => Some(path_str.into()),
+        Err(..) => {
+            env::home_dir().map(|mut dir| {
+                dir.push(".local/share");
+                dir
+            })
+        }
+    }
+}
+
 #[cfg(windows)]
-static PREFS_DIR_PATH: &'static str = "AppData/Roaming";
+fn get_prefs_base_path() -> Option<PathBuf> {
+    match env::var("APPDATA") {
+        Ok(path_str) => Some(path_str.into()),
+        Err(..) => {
+            env::home_dir().map(|mut dir| {
+                dir.push("AppData");
+                dir.push("Roaming");
+                dir
+            })
+        }
+    }
+}
 
 /// Generic key-value store for user data.
 ///
@@ -296,13 +325,6 @@ impl<T> PreferencesTrait for T
         *self = new_self;
         Ok(())
     }
-}
-
-fn get_prefs_base_path() -> Option<PathBuf> {
-    std::env::home_dir().map(|mut dir| {
-        dir.push(PREFS_DIR_PATH);
-        dir
-    })
 }
 
 fn path_buf_from_name(name: &str) -> Result<PathBuf, IoError> {

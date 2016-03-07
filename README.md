@@ -7,4 +7,4 @@ _Read and write user-specific application data in Rust_
 ## Installation
 Add the following to your `Cargo.toml`:
 
-`preferences = "^0.2.1"`
+`preferences = "^0.3.0"`
