@@ -146,7 +146,7 @@
 //! the operating system.
 //!
 //! * Mac OS X: `~/Library/Application Support`
-//! * Other Unix/Linux: `$XDG_DATA_HOME`, defaulting to `~/.local/share` if not set
+//! * Other Unix/Linux: `$XDG_CONFIG_HOME`, defaulting to `~/.config` if not set
 //! * Windows: `%APPDATA%`, defaulting to `<std::env::home_dir()>\AppData\Roaming` if not set
 //!
 //! The data is stored in JSON format. This has several advantages:
@@ -196,11 +196,11 @@ fn get_prefs_base_path() -> Option<PathBuf> {
 
 #[cfg(all(unix, not(target_os="macos")))]
 fn get_prefs_base_path() -> Option<PathBuf> {
-    match env::var("XDG_DATA_HOME") {
+    match env::var("XDG_CONFIG_HOME") {
         Ok(path_str) => Some(path_str.into()),
         Err(..) => {
             env::home_dir().map(|mut dir| {
-                dir.push(".local/share");
+                dir.push(".config");
                 dir
             })
         }
