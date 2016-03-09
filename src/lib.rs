@@ -15,9 +15,9 @@
 //! actually just a [`std::collections::HashMap<String, T>`][hashmap-api], where `T` defaults to
 //! `String`). This mirrors the Java API, which models user data as an opaque key-value store. As
 //! long as the map is instantiated over a type `T` which is serializable and deserializable,
-//! [`PreferencesTrait`](trait.PreferencesTrait.html) will be implemented for your map instance.
+//! [`Preferences`](trait.Preferences.html) will be implemented for your map instance.
 //! This will allow you to seamlessly save and load user data with the `save(..)` and `load(..)`
-//! methods on `PreferencesTrait`.
+//! methods on `Preferences`.
 //!
 //! # Roadmap
 //! This crate aims to provide a convenient API for both stable and nightly Rust, which is why
@@ -32,7 +32,7 @@
 //! # Basic example
 //! ```
 //! extern crate preferences;
-//! use preferences::{PreferencesMap, PreferencesTrait};
+//! use preferences::{PreferencesMap, Preferences};
 //!
 //! fn main() {
 //!
@@ -63,7 +63,7 @@
 //! ```
 //! extern crate rustc_serialize;
 //! extern crate preferences;
-//! use preferences::{PreferencesMap, PreferencesTrait};
+//! use preferences::{PreferencesMap, Preferences};
 //!
 //! #[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
 //! struct PlayerData {
@@ -90,7 +90,7 @@
 //! ```
 //! extern crate rustc_serialize;
 //! extern crate preferences;
-//! use preferences::{PreferencesMap, PreferencesTrait};
+//! use preferences::{PreferencesMap, Preferences};
 //!
 //! #[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
 //! struct Point(f32, f32);
@@ -116,7 +116,7 @@
 //! ```
 //! extern crate rustc_serialize;
 //! extern crate preferences;
-//! use preferences::{PreferencesMap, PreferencesTrait};
+//! use preferences::{PreferencesMap, Preferences};
 //!
 //! #[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
 //! struct Point(usize, usize);
@@ -156,7 +156,7 @@
 //! * Better adoption rates and language compatibility than e.g. TOML
 //! * Not reliant on a consistent memory layout like e.g. binary
 //!
-//! You could, of course, implement `PreferencesTrait` yourself and store your user data in
+//! You could, of course, implement `Preferences` yourself and store your user data in
 //! whatever location and format that you wanted. But that would defeat the purpose of this
 //! library. &#128522;
 //!
@@ -314,7 +314,7 @@ fn get_prefs_base_path() -> Option<PathBuf> {
 /// data in memory.
 ///
 /// To save or load user data, use the methods defined for
-/// [`PreferencesTrait`](trait.PreferencesTrait.html), which will be automatically implemented for
+/// [`Preferences`](trait.Preferences.html), which will be automatically implemented for
 /// `PreferencesMap<T>` as long as `T` is serializable. (See the
 /// [module documentation](index.html) for examples and more details.)
 ///
@@ -372,7 +372,7 @@ impl From<std::io::Error> for PreferencesError {
 ///
 /// * `fun-games-inc/awesome-game-2/options`
 /// * `fun-games-inc/awesome-game-2/saves`
-pub trait PreferencesTrait {
+pub trait Preferences {
     /// Saves the current state of this object. Implementation is platform-dependent, but the data
     /// will be local to the active user. For more details, see
     /// [the module documentation](index.html).
@@ -396,7 +396,7 @@ pub trait PreferencesTrait {
     fn load_from<R>(&mut self, reader: &mut R) -> Result<(), PreferencesError> where R: Read;
 }
 
-impl<T> PreferencesTrait for T
+impl<T> Preferences for T
     where T: Encodable + Decodable
 {
     fn save<S>(&self, path: S) -> Result<(), PreferencesError>
@@ -465,7 +465,7 @@ fn path_buf_from_name(name: &str) -> Result<PathBuf, IoError> {
 
 #[cfg(test)]
 mod tests {
-    use {PreferencesTrait, PreferencesMap};
+    use {Preferences, PreferencesMap};
     static TEST_PREFIX: &'static str = "rust_user_prefs_test";
     fn gen_test_name(name: &str) -> String {
         TEST_PREFIX.to_owned() + "/" + name
