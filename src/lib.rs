@@ -422,6 +422,15 @@ impl<T> PreferencesTrait for T
     }
 }
 
+/// Get full path to the base directory for preferences.
+///
+/// This makes no guarantees that the specified directory path actually *exists* (though you can
+/// easily use `std::fs::create_dir_all(..)`). Returns `None` if the directory cannot be found
+/// or is not available on the current platform.
+pub fn prefs_base_dir() -> Option<PathBuf> {
+    get_prefs_base_path()
+}
+
 fn path_buf_from_name(name: &str) -> Result<PathBuf, IoError> {
 
     let msg_not_found = "Could not find home directory for user data storage";
