@@ -143,11 +143,9 @@
 //!
 //! # Under the hood
 //! Data is written to flat files under the active user's home directory in a location specific to
-//! the operating system.
-//!
-//! * Mac OS X: `~/Library/Application Support`
-//! * Other Unix/Linux: `$XDG_CONFIG_HOME`, defaulting to `~/.config` if not set
-//! * Windows: `%APPDATA%`, defaulting to `<std::env::home_dir()>\AppData\Roaming` if not set
+//! the operating system. This location is decided by the `app_dirs` crate with the data type
+//! `UserConfig`. Within the data directory, the files are stored in a folder hierarchy that maps
+//! to a sanitized version of the preferences key passed to `save(..)`.
 //!
 //! The data is stored in JSON format. This has several advantages:
 //!
@@ -166,146 +164,19 @@
 
 #![warn(missing_docs)]
 
+extern crate app_dirs;
 extern crate rustc_serialize;
 
-#[cfg(windows)]
-extern crate winapi;
-#[cfg(windows)]
-extern crate shell32;
-#[cfg(windows)]
-extern crate ole32;
-
+use app_dirs::{AppDataType, get_app_data_root};
 use rustc_serialize::{Encodable, Decodable};
 use rustc_serialize::json::{self, EncoderError, DecoderError};
 use std::collections::HashMap;
-use std::env;
 use std::fs::{File, create_dir_all};
 use std::io::{ErrorKind, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::string::FromUtf8Error;
 
 type IoError = std::io::Error;
-
-#[cfg(target_os="macos")]
-fn get_prefs_base_path() -> Option<PathBuf> {
-    env::home_dir().map(|mut dir| {
-        dir.push("Library/Application Support");
-        dir
-    })
-}
-
-#[cfg(all(unix, not(target_os="macos")))]
-fn get_prefs_base_path() -> Option<PathBuf> {
-    match env::var("XDG_CONFIG_HOME") {
-        Ok(path_str) => Some(path_str.into()),
-        Err(..) => {
-            env::home_dir().map(|mut dir| {
-                dir.push(".config");
-                dir
-            })
-        }
-    }
-}
-
-#[cfg(windows)]
-mod windows {
-    use std::slice;
-    use std::ptr;
-    use std::ffi::OsString;
-    use std::os::windows::ffi::OsStringExt;
-
-    use winapi;
-    use shell32::SHGetKnownFolderPath;
-    use ole32;
-
-    // This value is not currently exported by any of the winapi crates, but
-    // its exact value is specified in the MSDN documentation.
-    // https://msdn.microsoft.com/en-us/library/dd378457.aspx#FOLDERID_RoamingAppData
-    #[allow(non_upper_case_globals)]
-    static FOLDERID_RoamingAppData: winapi::GUID = winapi::GUID {
-        Data1: 0x3EB685DB,
-        Data2: 0x65F9,
-        Data3: 0x4CF6,
-        Data4: [0xA0, 0x3A, 0xE3, 0xEF, 0x65, 0x72, 0x9F, 0x3D],
-    };
-
-    // Retrieves the OsString for AppData using the proper Win32
-    // function without relying on environment variables
-    pub fn get_appdata() -> Result<OsString, ()> {
-        unsafe {
-            // A Wide c-style string pointer which will be filled by
-            // SHGetKnownFolderPath. We are responsible for freeing
-            // this value if the call succeeds
-            let mut raw_path: winapi::PWSTR = ptr::null_mut();
-
-            // Get RoamingAppData's path
-            let result = SHGetKnownFolderPath(&FOLDERID_RoamingAppData,
-                                              0, // No extra flags are neccesary
-                                              ptr::null_mut(), // user context, null = current user
-                                              &mut raw_path);
-
-            // SHGetKnownFolderPath returns an HRESULT, which represents
-            // failure states by being negative. This should not fail, but
-            // we should be prepared should it fail some day.
-            if result < 0 {
-                return Err(());
-            }
-
-            // Since SHGetKnownFolderPath succeeded, we must ensure that we
-            // free the memory even if allocating an OsString fails later on.
-            // To do this, we will use a nested struct with a Drop implementation
-            let _cleanup = {
-                struct FreeStr(winapi::PWSTR);
-                impl Drop for FreeStr {
-                    fn drop(&mut self) {
-                        unsafe { ole32::CoTaskMemFree(self.0 as *mut _) };
-                    }
-                }
-                FreeStr(raw_path)
-            };
-
-            // libstd does not contain a wide-char strlen as far as I know,
-            // so we'll have to make do calculating it ourselves.
-            let mut strlen = 0;
-            for i in 0.. {
-                if *raw_path.offset(i) == 0 {
-                    // isize -> usize is always safe here because we know
-                    // that an isize can hold the positive length, as each
-                    // char is 2 bytes long, and so could only be half of
-                    // the memory space even theoretically.
-                    strlen = i as usize;
-                    break;
-                }
-            }
-
-            // Now that we know the length of the string, we can
-            // convert it to a &[u16]
-            let wpath = slice::from_raw_parts(raw_path, strlen);
-            // Window's OsStringExt has the function from_wide for
-            // converting a &[u16] into an OsString.
-            let path = OsStringExt::from_wide(wpath);
-
-            // raw_path will be automatically freed by _cleanup, regardless of
-            // whether any of the previous functions panic.
-
-            Ok(path)
-        }
-    }
-}
-
-#[cfg(windows)]
-fn get_prefs_base_path() -> Option<PathBuf> {
-    match windows::get_appdata() {
-        Ok(path_str) => Some(path_str.into()),
-        Err(..) => {
-            env::home_dir().map(|mut dir| {
-                dir.push("AppData");
-                dir.push("Roaming");
-                dir
-            })
-        }
-    }
-}
 
 /// Generic key-value store for user data.
 ///
@@ -324,7 +195,7 @@ pub type PreferencesMap<T = String> = HashMap<String, T>;
 /// Error type representing the errors that can occur when saving or loading user data.
 #[derive(Debug)]
 pub enum PreferencesError {
-    /// An error occurred during JSON (serialization.
+    /// An error occurred during JSON serialization.
     Serialize(EncoderError),
     /// An error occurred during JSON deserialization.
     Deserialize(DecoderError),
@@ -365,30 +236,33 @@ impl From<std::io::Error> for PreferencesError {
 /// `Decodable` (from `rustc-serialize`). However, you are encouraged to use the provided type,
 /// [`PreferencesMap`](type.PreferencesMap.html).
 ///
-/// The `path` parameter of `save(..)` and `load(..)` should be a valid, relative file path. It is
+/// The `key` parameter of `save(..)` and `load(..)` should be an application-unique string. It is
 /// *highly* recommended that you use the format
 /// `[company or author]/[application name]/[data description]`. For example, a game might use
-/// the following paths for player options and save data, respectively:
+/// the following keys for player options and save data, respectively:
 ///
 /// * `fun-games-inc/awesome-game-2/options`
 /// * `fun-games-inc/awesome-game-2/saves`
+///
+/// Under the hood, the key string is sanitized and converted into a directory hierarchy.
+/// Following the suggested key format and sticking to alphanumeric characters and hypens will
+/// make the user preferences easier to find in case they need to be manually edited or backed up.
 pub trait Preferences {
     /// Saves the current state of this object. Implementation is platform-dependent, but the data
     /// will be local to the active user. For more details, see
     /// [the module documentation](index.html).
     ///
     /// # Failures
-    /// If a serialization or file I/O error occurs (e.g. permission denied), or if the provided
-    /// `path` argument is invalid.
-    fn save<S>(&self, path: S) -> Result<(), PreferencesError> where S: AsRef<str>;
-    /// Loads this object's state from previously saved user data with the same `path`. This is
+    /// If a serialization or file I/O error (e.g. permission denied) occurs.
+    fn save<S>(&self, key: S) -> Result<(), PreferencesError> where S: AsRef<str>;
+    /// Loads this object's state from previously saved user data with the same `key`. This is
     /// an instance method which completely overwrites the object's state with the serialized
     /// data. Thus, it is recommended that you call this method immediately after instantiating
     /// the preferences object.
     ///
     /// # Failures
-    /// If a deserialization or file I/O error occurs (e.g. permission denied), if the provided
-    /// `path` argument is invalid, or if no user data exists at that `path`.
+    /// If a deserialization or file I/O error (e.g. permission denied) occurs, or if no user data
+    /// exists at that `path`.
     fn load<S>(&mut self, path: S) -> Result<(), PreferencesError> where S: AsRef<str>;
     /// Same as `save`, but writes the serialized preferences to an arbitrary writer.
     fn save_to<W>(&self, writer: &mut W) -> Result<(), PreferencesError> where W: Write;
@@ -402,7 +276,8 @@ impl<T> Preferences for T
     fn save<S>(&self, path: S) -> Result<(), PreferencesError>
         where S: AsRef<str>
     {
-        let path = try!(path_buf_from_name(path.as_ref()));
+        let mut path = try!(path_buf_from_key(path.as_ref()));
+        path.set_extension("json");
         path.parent().map(create_dir_all);
         let mut file = try!(File::create(path));
         self.save_to(&mut file)
@@ -410,7 +285,8 @@ impl<T> Preferences for T
     fn load<S>(&mut self, path: S) -> Result<(), PreferencesError>
         where S: AsRef<str>
     {
-        let path = try!(path_buf_from_name(path.as_ref()));
+        let mut path = try!(path_buf_from_key(path.as_ref()));
+        path.set_extension("json");
         let mut file = try!(File::open(path));
         self.load_from(&mut file)
     }
@@ -437,36 +313,47 @@ impl<T> Preferences for T
 /// Get full path to the base directory for preferences.
 ///
 /// This makes no guarantees that the specified directory path actually *exists* (though you can
-/// easily use `std::fs::create_dir_all(..)`). Returns `None` if the directory cannot be found
+/// easily use `std::fs::create_dir_all(..)`). Returns `None` if the directory cannot be determined
 /// or is not available on the current platform.
 pub fn prefs_base_dir() -> Option<PathBuf> {
-    get_prefs_base_path()
+    get_app_data_root(AppDataType::UserConfig).ok()
 }
 
-fn path_buf_from_name(name: &str) -> Result<PathBuf, IoError> {
-
-    let msg_not_found = "Could not find home directory for user data storage";
-    let err_not_found = IoError::new(ErrorKind::NotFound, msg_not_found);
-
-    let msg_bad_name = "Invalid preferences name: ".to_owned() + name;
-    let err_bad_name = Result::Err(IoError::new(ErrorKind::Other, msg_bad_name));
-
-    if name.starts_with("../") || name.ends_with("/..") || name.contains("/../") {
-        return err_bad_name;
+fn path_buf_from_key(name: &str) -> Result<PathBuf, IoError> {
+    match prefs_base_dir() {
+        Some(mut buf) => {
+            let keys: Vec<String> = name.split("/").map(|s| s.into()).collect();
+            for key in keys.iter() {
+                let mut safe_key = String::new();
+                if key == "" {
+                    safe_key.push('_');
+                } else {
+                    for c in key.chars() {
+                        let n = c as u32;
+                        let is_lower = 'a' as u32 <= n && n <= 'z' as u32;
+                        let is_upper = 'A' as u32 <= n && n <= 'Z' as u32;
+                        let is_number = '0' as u32 <= n && n <= '9' as u32;
+                        let is_space = c == ' ';
+                        let is_hyphen = c == '-';
+                        if is_upper || is_lower || is_number || is_space || is_hyphen {
+                            safe_key.push(c);
+                        } else {
+                            safe_key.push_str(&format!("_{}_", n));
+                        }
+                    }
+                }
+                buf.push(safe_key);
+            }
+            Ok(buf)
+        }
+        None => Err(IoError::new(ErrorKind::NotFound, "Preferences directory unavailable")),
     }
-    let mut base_path = try!(get_prefs_base_path().ok_or(err_not_found));
-    let name_path = Path::new(name);
-    if !name_path.is_relative() {
-        return err_bad_name;
-    }
-    base_path.push(name_path);
-    Result::Ok(base_path)
 }
 
 #[cfg(test)]
 mod tests {
     use {Preferences, PreferencesMap};
-    static TEST_PREFIX: &'static str = "rust_user_prefs_test";
+    static TEST_PREFIX: &'static str = "preferences-rs/tests";
     fn gen_test_name(name: &str) -> String {
         TEST_PREFIX.to_owned() + "/" + name
     }
@@ -480,7 +367,7 @@ mod tests {
     }
     #[test]
     fn test_save_load() {
-        let name = gen_test_name("/save_load");
+        let name = gen_test_name("save-load");
         let sample = gen_sample_prefs();
         let save_result = sample.save(&name);
         println!("Save result: {:?}", save_result);
