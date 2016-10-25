@@ -5,34 +5,36 @@
 //!
 //! Though it was originally inspired by Java's convenient
 //! [Preferences API](https://docs.oracle.com/javase/8/docs/api/java/util/prefs/Preferences.html),
-//! this crate is more flexible; any type that implements
+//! this crate is more flexible. *Any* struct or enum that implements
 //! [`rustc-serialize`][rustc-serialize-api]'s `Encodable` and `Decodable`
-//! traits can be stored and retrieved as user data! Thankfully, implementing those traits is
+//! traits can be stored and retrieved as user data. Implementing those traits is
 //! trivial; just use `#[derive(RustcEncodable, RustcDecodable)`.
 //!
 //! # Usage
 //! For convenience, the type [`PreferencesMap<T>`](type.PreferencesMap.html) is provided. (It's
-//! actually just a [`std::collections::HashMap<String, T>`][hashmap-api], where `T` defaults to
+//! actually just [`std::collections::HashMap<String, T>`][hashmap-api], where `T` defaults to
 //! `String`). This mirrors the Java API, which models user data as an opaque key-value store. As
-//! long as the map is instantiated over a type `T` which is serializable and deserializable,
-//! [`Preferences`](trait.Preferences.html) will be implemented for your map instance.
-//! This will allow you to seamlessly save and load user data with the `save(..)` and `load(..)`
-//! methods on `Preferences`.
+//! long as  `T` is serializable and deserializable, [`Preferences`](trait.Preferences.html)
+//! will be implemented for your map instance. This allows you to seamlessly save and load
+//! user data with the `save(..)` and `load(..)` trait methods from `Preferences`.
 //!
 //! # Roadmap
 //! This crate aims to provide a convenient API for both stable and nightly Rust, which is why
 //! it currently uses [`rustc-serialize`][rustc-serialize-api] instead of the more recent
-//! [`serde`][serde-api] library. In the distant future, when compiler plugins are stabilized
+//! [`serde`][serde-api] library. In the distant future, when custom derives are stabilized
 //! and `serde` is available in stable Rust, this library will migrate to `serde`. This will be
-//! a breaking change (and will update the semantic version number accordingly so that your
-//! builds don't break). At that point, updating should be dead simple; you'll just have to
-//! replace `#[derive(RustcEncodable, RustcDecodable)` with `#[derive(Serialize, Deserialize)`,
-//! and only if you store custom data types in your user data.
+//! a breaking change (**and will update the semantic version number accordingly so that your
+//! builds don't break**).
+//!
+//! At that point, updating should be dead simple; you'll just have to
+//! replace `#[derive(RustcEncodable, RustcDecodable)` with `#[derive(Serialize, Deserialize)`.
 //!
 //! # Basic example
 //! ```
 //! extern crate preferences;
-//! use preferences::{PreferencesMap, Preferences};
+//! use preferences::{AppInfo, PreferencesMap, Preferences};
+//!
+//! const APP_INFO: AppInfo = AppInfo{name: "preferences", author: "Rust language community"};
 //!
 //! fn main() {
 //!
@@ -45,26 +47,31 @@
 //!     faves.insert("programming language".into(), "Rust".into());
 //!
 //!     // Store the user's preferences
-//!     let prefs_key = "preferences-rs/examples/faves";
-//!     faves.save(prefs_key);
+//!     let prefs_key = "tests/docs/basic-example";
+//!     let save_result = faves.save(&APP_INFO, prefs_key);
+//!     assert!(save_result.is_ok());
 //!
 //!     // ... Then do some stuff ...
 //!
 //!     // Retrieve the user's preferences
-//!     let mut loaded_faves = PreferencesMap::new();
-//!     let load_result = loaded_faves.load(prefs_key);
+//!     let load_result = PreferencesMap::<String>::load(&APP_INFO, prefs_key);
 //!     assert!(load_result.is_ok());
-//!     assert_eq!(loaded_faves, faves);
+//!     assert_eq!(load_result.unwrap(), faves);
 //!
 //! }
 //! ```
 //!
 //! # Using custom data types
 //! ```
+//! // `rustc_serialize` will be replaced with `serde` when custom derive is stabilized
 //! extern crate rustc_serialize;
 //! extern crate preferences;
-//! use preferences::{PreferencesMap, Preferences};
+//! use preferences::{AppInfo, Preferences};
 //!
+//! const APP_INFO: AppInfo = AppInfo{name: "preferences", author: "Rust language community"};
+//!
+//! // Deriving `RustcEncodable` and `RustcDecodable` on a struct/enum automatically implements
+//! // the `Preferences` trait.
 //! #[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
 //! struct PlayerData {
 //!     level: u32,
@@ -75,13 +82,14 @@
 //!
 //!     let player = PlayerData{level: 2, health: 0.75};
 //!
-//!     let prefs_key = "preferences-rs/examples/player";
-//!     player.save(prefs_key);
+//!     let prefs_key = "tests/docs/custom-types";
+//!     let save_result = player.save(&APP_INFO, prefs_key);
+//!     assert!(save_result.is_ok());
 //!
-//!     let mut loaded_player = PlayerData{level: 0, health: 0.0};
-//!     let load_result = loaded_player.load(prefs_key);
+//!     // Method `load` is from trait `Preferences`.
+//!     let load_result = PlayerData::load(&APP_INFO, prefs_key);
 //!     assert!(load_result.is_ok());
-//!     assert_eq!(loaded_player, player);
+//!     assert_eq!(load_result.unwrap(), player);
 //!
 //! }
 //! ```
@@ -90,7 +98,9 @@
 //! ```
 //! extern crate rustc_serialize;
 //! extern crate preferences;
-//! use preferences::{PreferencesMap, Preferences};
+//! use preferences::{AppInfo, PreferencesMap, Preferences};
+//!
+//! const APP_INFO: AppInfo = AppInfo{name: "preferences", author: "Rust language community"};
 //!
 //! #[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
 //! struct Point(f32, f32);
@@ -101,13 +111,13 @@
 //!     places.insert("treasure".into(), Point(1.0, 1.0));
 //!     places.insert("home".into(), Point(-1.0, 6.6));
 //!
-//!     let prefs_key = "preferences-rs/examples/places";
-//!     places.save(prefs_key);
+//!     let prefs_key = "tests/docs/custom-types-with-preferences-map";
+//!     let save_result = places.save(&APP_INFO, prefs_key);
+//!     assert!(save_result.is_ok());
 //!
-//!     let mut loaded_places = PreferencesMap::new();
-//!     let load_result = loaded_places.load(prefs_key);
+//!     let load_result = PreferencesMap::load(&APP_INFO, prefs_key);
 //!     assert!(load_result.is_ok());
-//!     assert_eq!(loaded_places, places);
+//!     assert_eq!(load_result.unwrap(), places);
 //!
 //! }
 //! ```
@@ -116,7 +126,9 @@
 //! ```
 //! extern crate rustc_serialize;
 //! extern crate preferences;
-//! use preferences::{PreferencesMap, Preferences};
+//! use preferences::{AppInfo, Preferences};
+//!
+//! const APP_INFO: AppInfo = AppInfo{name: "preferences", author: "Rust language community"};
 //!
 //! #[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
 //! struct Point(usize, usize);
@@ -130,13 +142,13 @@
 //!         Point(0,1),
 //!     ];
 //!
-//!     let prefs_key = "preferences-rs/examples/square";
-//!     square.save(prefs_key);
+//!     let prefs_key = "tests/docs/custom-types-in-containers";
+//!     let save_result = square.save(&APP_INFO, prefs_key);
+//!     assert!(save_result.is_ok());
 //!
-//!     let mut loaded_square: Vec<Point> = Vec::new();
-//!     let load_result = loaded_square.load(prefs_key);
+//!     let load_result = Vec::<Point>::load(&APP_INFO, prefs_key);
 //!     assert!(load_result.is_ok());
-//!     assert_eq!(loaded_square, square);
+//!     assert_eq!(load_result.unwrap(), square);
 //!
 //! }
 //! ```
@@ -167,16 +179,20 @@
 extern crate app_dirs;
 extern crate rustc_serialize;
 
-use app_dirs::{AppDataType, get_app_data_root};
+pub use app_dirs::AppInfo;
+use app_dirs::{AppDataType, AppDirsError, get_data_root, get_app_dir};
 use rustc_serialize::{Encodable, Decodable};
 use rustc_serialize::json::{self, EncoderError, DecoderError};
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fs::{File, create_dir_all};
-use std::io::{ErrorKind, Read, Write};
+use std::io::{self, ErrorKind, Read, Write};
 use std::path::PathBuf;
 use std::string::FromUtf8Error;
 
-type IoError = std::io::Error;
+const DATA_TYPE: AppDataType = AppDataType::UserConfig;
+static PREFS_FILE_EXTENSION: &'static str = ".prefs.json";
+static DEFAULT_PREFS_FILENAME: &'static str = "prefs.json";
 
 /// Generic key-value store for user data.
 ///
@@ -184,7 +200,7 @@ type IoError = std::io::Error;
 /// (with `T` defaulting to `String`), so use the `HashMap` API methods to access and change user
 /// data in memory.
 ///
-/// To save or load user data, use the methods defined for
+/// To save or load user data, use the methods defined for the trait
 /// [`Preferences`](trait.Preferences.html), which will be automatically implemented for
 /// `PreferencesMap<T>` as long as `T` is serializable. (See the
 /// [module documentation](index.html) for examples and more details.)
@@ -199,8 +215,10 @@ pub enum PreferencesError {
     Serialize(EncoderError),
     /// An error occurred during JSON deserialization.
     Deserialize(DecoderError),
-    /// An error occurred during file I/O.
-    Io(std::io::Error),
+    /// An error occurred during preferences file I/O.
+    Io(io::Error),
+    /// Couldn't figure out where to put or find the serialized data.
+    Directory(AppDirsError),
 }
 
 impl From<EncoderError> for PreferencesError {
@@ -219,7 +237,7 @@ impl From<FromUtf8Error> for PreferencesError {
     fn from(_: FromUtf8Error) -> Self {
         let kind = ErrorKind::InvalidData;
         let msg = "Preferences file contained invalid UTF-8";
-        let err = IoError::new(kind, msg);
+        let err = io::Error::new(kind, msg);
         PreferencesError::Io(err)
     }
 }
@@ -230,31 +248,44 @@ impl From<std::io::Error> for PreferencesError {
     }
 }
 
+impl From<AppDirsError> for PreferencesError {
+    fn from(e: AppDirsError) -> Self {
+        PreferencesError::Directory(e)
+    }
+}
+
 /// Trait for types that can be saved & loaded as user data.
 ///
-/// This type is automatically implemented for any type `T` which implements both `Encodable` and
-/// `Decodable` (from `rustc-serialize`). However, you are encouraged to use the provided type,
-/// [`PreferencesMap`](type.PreferencesMap.html).
+/// This type is automatically implemented for any struct/enum `T` which implements both
+/// `Encodable` and `Decodable` (from `rustc-serialize`). (Trivially, you can annotate the type
+/// with `#[derive(RustcEncodable, RustcDecodable)`). It is encouraged to use the provided
+/// type, [`PreferencesMap`](type.PreferencesMap.html), to bundle related user preferences.
 ///
-/// The `key` parameter of `save(..)` and `load(..)` should be an application-unique string. It is
-/// *highly* recommended that you use the format
-/// `[company or author]/[application name]/[data description]`. For example, a game might use
-/// the following keys for player options and save data, respectively:
+/// For the `app` parameter of `save(..)` and `load(..)`, it's recommended that you use a single
+/// `const` instance of `AppInfo` that represents your program:
 ///
-/// * `fun-games-inc/awesome-game-2/options`
-/// * `fun-games-inc/awesome-game-2/saves`
+/// ```
+/// use preferences::AppInfo;
+/// const APP_INFO: AppInfo = AppInfo{name: "Awesome App", author: "Dedicated Dev"};
+/// ```
 ///
-/// Under the hood, the key string is sanitized and converted into a directory hierarchy.
-/// Following the suggested key format and sticking to alphanumeric characters and hypens will
-/// make the user preferences easier to find in case they need to be manually edited or backed up.
-pub trait Preferences {
+/// The `key` parameter of `save(..)` and `load(..)` should be used to uniquely identify different
+/// preferences data. It roughly maps to a platform-dependent directory hierarchy, with forward
+/// slashes used as separators on all platforms. Keys are sanitized to be valid paths; to ensure
+/// human-readable paths, use only letters, digits, spaces, hyphens, underscores, periods, and
+/// slashes.
+///
+/// # Example keys
+/// * `options/graphics`
+/// * `saves/quicksave`
+/// * `bookmarks/favorites`
+pub trait Preferences: Sized {
     /// Saves the current state of this object. Implementation is platform-dependent, but the data
-    /// will be local to the active user. For more details, see
-    /// [the module documentation](index.html).
+    /// will be local to the active user.
     ///
     /// # Failures
     /// If a serialization or file I/O error (e.g. permission denied) occurs.
-    fn save<S>(&self, key: S) -> Result<(), PreferencesError> where S: AsRef<str>;
+    fn save<S: AsRef<str>>(&self, app: &AppInfo, key: S) -> Result<(), PreferencesError>;
     /// Loads this object's state from previously saved user data with the same `key`. This is
     /// an instance method which completely overwrites the object's state with the serialized
     /// data. Thus, it is recommended that you call this method immediately after instantiating
@@ -263,50 +294,55 @@ pub trait Preferences {
     /// # Failures
     /// If a deserialization or file I/O error (e.g. permission denied) occurs, or if no user data
     /// exists at that `path`.
-    fn load<S>(&mut self, path: S) -> Result<(), PreferencesError> where S: AsRef<str>;
+    fn load<S: AsRef<str>>(app: &AppInfo, key: S) -> Result<Self, PreferencesError>;
     /// Same as `save`, but writes the serialized preferences to an arbitrary writer.
-    fn save_to<W>(&self, writer: &mut W) -> Result<(), PreferencesError> where W: Write;
+    fn save_to<W: Write>(&self, writer: &mut W) -> Result<(), PreferencesError>;
     /// Same as `load`, but reads the serialized preferences from an arbitrary writer.
-    fn load_from<R>(&mut self, reader: &mut R) -> Result<(), PreferencesError> where R: Read;
+    fn load_from<R: Read>(reader: &mut R) -> Result<Self, PreferencesError>;
+}
+
+fn compute_file_path<S: AsRef<str>>(app: &AppInfo, key: S) -> Result<PathBuf, PreferencesError> {
+    let mut path = try!(get_app_dir(DATA_TYPE, app, key.as_ref()));
+    let new_name = match path.file_name() {
+        Some(name) if name.len() > 0 => {
+            let mut new_name = OsString::with_capacity(name.len() + PREFS_FILE_EXTENSION.len());
+            new_name.push(name);
+            new_name.push(PREFS_FILE_EXTENSION);
+            new_name
+        },
+        _ => DEFAULT_PREFS_FILENAME.into(),
+    };
+    path.set_file_name(new_name);
+    Ok(path)
 }
 
 impl<T> Preferences for T
-    where T: Encodable + Decodable
+    where T: Encodable + Decodable + Sized
 {
-    fn save<S>(&self, path: S) -> Result<(), PreferencesError>
+    fn save<S>(&self, app: &AppInfo, key: S) -> Result<(), PreferencesError>
         where S: AsRef<str>
     {
-        let mut path = try!(path_buf_from_key(path.as_ref()));
-        path.set_extension("json");
+        let path = try!(compute_file_path(app, key.as_ref()));
         path.parent().map(create_dir_all);
         let mut file = try!(File::create(path));
         self.save_to(&mut file)
     }
-    fn load<S>(&mut self, path: S) -> Result<(), PreferencesError>
-        where S: AsRef<str>
-    {
-        let mut path = try!(path_buf_from_key(path.as_ref()));
-        path.set_extension("json");
+    fn load<S: AsRef<str>>(app: &AppInfo, key: S) -> Result<Self, PreferencesError> {
+        let path = try!(compute_file_path(app, key.as_ref()));
         let mut file = try!(File::open(path));
-        self.load_from(&mut file)
+        Self::load_from(&mut file)
     }
-    fn save_to<W>(&self, writer: &mut W) -> Result<(), PreferencesError>
-        where W: Write
-    {
+    fn save_to<W: Write>(&self, writer: &mut W) -> Result<(), PreferencesError> {
         let encoded = try!(json::encode(self));
         try!(writer.write_all(encoded.as_bytes()));
         try!(writer.flush());
         Ok(())
     }
-    fn load_from<R>(&mut self, reader: &mut R) -> Result<(), PreferencesError>
-        where R: Read
-    {
+    fn load_from<R: Read>(reader: &mut R) -> Result<Self, PreferencesError> {
         let mut bytes = Vec::new();
         try!(reader.read_to_end(&mut bytes));
         let encoded = try!(String::from_utf8(bytes));
-        let new_self = try!(json::decode(&encoded));
-        *self = new_self;
-        Ok(())
+        json::decode(&encoded).map_err(|e| e.into())
     }
 }
 
@@ -316,44 +352,14 @@ impl<T> Preferences for T
 /// easily use `std::fs::create_dir_all(..)`). Returns `None` if the directory cannot be determined
 /// or is not available on the current platform.
 pub fn prefs_base_dir() -> Option<PathBuf> {
-    get_app_data_root(AppDataType::UserConfig).ok()
-}
-
-fn path_buf_from_key(name: &str) -> Result<PathBuf, IoError> {
-    match prefs_base_dir() {
-        Some(mut buf) => {
-            let keys: Vec<String> = name.split("/").map(|s| s.into()).collect();
-            for key in keys.iter() {
-                let mut safe_key = String::new();
-                if key == "" {
-                    safe_key.push('_');
-                } else {
-                    for c in key.chars() {
-                        let n = c as u32;
-                        let is_lower = 'a' as u32 <= n && n <= 'z' as u32;
-                        let is_upper = 'A' as u32 <= n && n <= 'Z' as u32;
-                        let is_number = '0' as u32 <= n && n <= '9' as u32;
-                        let is_space = c == ' ';
-                        let is_hyphen = c == '-';
-                        if is_upper || is_lower || is_number || is_space || is_hyphen {
-                            safe_key.push(c);
-                        } else {
-                            safe_key.push_str(&format!("_{}_", n));
-                        }
-                    }
-                }
-                buf.push(safe_key);
-            }
-            Ok(buf)
-        }
-        None => Err(IoError::new(ErrorKind::NotFound, "Preferences directory unavailable")),
-    }
+    get_data_root(AppDataType::UserConfig).ok()
 }
 
 #[cfg(test)]
 mod tests {
-    use {Preferences, PreferencesMap};
-    static TEST_PREFIX: &'static str = "preferences-rs/tests";
+    use {AppInfo, Preferences, PreferencesMap};
+    const APP_INFO: AppInfo = AppInfo{name: "preferences", author: "Rust language community"};
+    const TEST_PREFIX: &'static str = "tests/module";
     fn gen_test_name(name: &str) -> String {
         TEST_PREFIX.to_owned() + "/" + name
     }
@@ -369,13 +375,12 @@ mod tests {
     fn test_save_load() {
         let name = gen_test_name("save-load");
         let sample = gen_sample_prefs();
-        let save_result = sample.save(&name);
+        let save_result = sample.save(&APP_INFO, &name);
         println!("Save result: {:?}", save_result);
         assert!(save_result.is_ok());
-        let mut loaded_map = PreferencesMap::new();
-        let load_result = loaded_map.load(&name);
+        let load_result = PreferencesMap::load(&APP_INFO, &name);
         println!("Load result: {:?}", load_result);
         assert!(load_result.is_ok());
-        assert_eq!(loaded_map, sample);
+        assert_eq!(load_result.unwrap(), sample);
     }
 }

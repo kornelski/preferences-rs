@@ -1,4 +1,4 @@
-# preferences-rs
+# preferences
 _Read and write user-specific application data in Rust_
 
 [![crates.io: preferences](https://img.shields.io/crates/v/preferences.svg?label=crates.io%3A%20preferences)](https://crates.io/crates/preferences)
@@ -11,4 +11,4 @@ _Read and write user-specific application data in Rust_
 ## Installation
 Add the following to your `Cargo.toml`:
 
-`preferences = "^0.6.0"`
+`preferences = "^0.7.0"`
