@@ -1,6 +1,6 @@
 [package]
 name = "preferences"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["Andy Barron <AndrewLBarron@gmail.com>"]
 
 description = "Read and write user-specific application data (in stable Rust)"
@@ -11,5 +11,5 @@ keywords = ["preferences", "user", "data", "persistent", "storage"]
 license = "MIT"
 
 [dependencies]
-app_dirs = "^1.0.1"
+app_dirs = "^1.1.1"
 rustc-serialize = "^0.3.19"
