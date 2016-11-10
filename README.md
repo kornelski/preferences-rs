@@ -6,7 +6,7 @@ _Read and write user-specific application data in Rust_
 [![Windows build status](https://img.shields.io/appveyor/ci/AndyBarron/preferences-rs.svg?label=Windows%20builds)](https://ci.appveyor.com/project/AndyBarron/preferences-rs)
 
 ## Documentation
-[https://andybarron.github.io/preferences-rs](https://andybarron.github.io/preferences-rs)
+https://docs.rs/preferences
 
 ## Installation
 Add the following to your `Cargo.toml`:
