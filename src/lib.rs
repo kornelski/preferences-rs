@@ -6,9 +6,10 @@
 //! Though it was originally inspired by Java's convenient
 //! [Preferences API](https://docs.oracle.com/javase/8/docs/api/java/util/prefs/Preferences.html),
 //! this crate is more flexible. *Any* struct or enum that implements
-//! [`rustc-serialize`][rustc-serialize-api]'s `Encodable` and `Decodable`
+//! [`serde`][serde-api]'s `Serialize` and `Deserialize`
 //! traits can be stored and retrieved as user data. Implementing those traits is
-//! trivial; just use `#[derive(RustcEncodable, RustcDecodable)`.
+//! trivial; just include the crate `serde_derive` (don't forget `#[macro_use]`!) and add
+//! `#[derive(Serialize, Deserialize)` to your struct definition. (See examples below.)
 //!
 //! # Usage
 //! For convenience, the type [`PreferencesMap<T>`](type.PreferencesMap.html) is provided. (It's
@@ -17,17 +18,6 @@
 //! long as  `T` is serializable and deserializable, [`Preferences`](trait.Preferences.html)
 //! will be implemented for your map instance. This allows you to seamlessly save and load
 //! user data with the `save(..)` and `load(..)` trait methods from `Preferences`.
-//!
-//! # Roadmap
-//! This crate aims to provide a convenient API for both stable and nightly Rust, which is why
-//! it currently uses [`rustc-serialize`][rustc-serialize-api] instead of the more recent
-//! [`serde`][serde-api] library. In the distant future, when custom derives are stabilized
-//! and `serde` is available in stable Rust, this library will migrate to `serde`. This will be
-//! a breaking change (**and will update the semantic version number accordingly so that your
-//! builds don't break**).
-//!
-//! At that point, updating should be dead simple; you'll just have to
-//! replace `#[derive(RustcEncodable, RustcDecodable)` with `#[derive(Serialize, Deserialize)`.
 //!
 //! # Basic example
 //! ```
@@ -63,16 +53,16 @@
 //!
 //! # Using custom data types
 //! ```
-//! // `rustc_serialize` will be replaced with `serde` when custom derive is stabilized
-//! extern crate rustc_serialize;
+//! #[macro_use]
+//! extern crate serde_derive;
 //! extern crate preferences;
 //! use preferences::{AppInfo, Preferences};
 //!
 //! const APP_INFO: AppInfo = AppInfo{name: "preferences", author: "Rust language community"};
 //!
-//! // Deriving `RustcEncodable` and `RustcDecodable` on a struct/enum automatically implements
+//! // Deriving `Serialize` and `Deserialize` on a struct/enum automatically implements
 //! // the `Preferences` trait.
-//! #[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
+//! #[derive(Serialize, Deserialize, PartialEq, Debug)]
 //! struct PlayerData {
 //!     level: u32,
 //!     health: f32,
@@ -96,13 +86,14 @@
 //!
 //! # Using custom data types with `PreferencesMap`
 //! ```
-//! extern crate rustc_serialize;
+//! #[macro_use]
+//! extern crate serde_derive;
 //! extern crate preferences;
 //! use preferences::{AppInfo, PreferencesMap, Preferences};
 //!
 //! const APP_INFO: AppInfo = AppInfo{name: "preferences", author: "Rust language community"};
 //!
-//! #[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
+//! #[derive(Serialize, Deserialize, PartialEq, Debug)]
 //! struct Point(f32, f32);
 //!
 //! fn main() {
@@ -124,13 +115,14 @@
 //!
 //! # Using custom data types with serializable containers
 //! ```
-//! extern crate rustc_serialize;
+//! #[macro_use]
+//! extern crate serde_derive;
 //! extern crate preferences;
 //! use preferences::{AppInfo, Preferences};
 //!
 //! const APP_INFO: AppInfo = AppInfo{name: "preferences", author: "Rust language community"};
 //!
-//! #[derive(RustcEncodable, RustcDecodable, PartialEq, Debug)]
+//! #[derive(Serialize, Deserialize, PartialEq, Debug)]
 //! struct Point(usize, usize);
 //!
 //! fn main() {
@@ -171,20 +163,20 @@
 //! library. &#128522;
 //!
 //! [hashmap-api]: https://doc.rust-lang.org/nightly/std/collections/struct.HashMap.html
-//! [rustc-serialize-api]: https://crates.io/crates/rustc-serialize
 //! [serde-api]: https://crates.io/crates/serde
 
 #![warn(missing_docs)]
 
 extern crate app_dirs;
-extern crate rustc_serialize;
+extern crate serde;
+extern crate serde_json;
 
-pub use app_dirs::AppInfo;
-use app_dirs::{AppDataType, AppDirsError, get_data_root, get_app_dir};
-use rustc_serialize::{Encodable, Decodable};
-use rustc_serialize::json::{self, EncoderError, DecoderError};
+pub use app_dirs::{AppDirsError, AppInfo};
+use app_dirs::{AppDataType, get_data_root, get_app_dir};
+use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::ffi::OsString;
+use std::fmt;
 use std::fs::{File, create_dir_all};
 use std::io::{self, ErrorKind, Read, Write};
 use std::path::PathBuf;
@@ -211,25 +203,47 @@ pub type PreferencesMap<T = String> = HashMap<String, T>;
 /// Error type representing the errors that can occur when saving or loading user data.
 #[derive(Debug)]
 pub enum PreferencesError {
-    /// An error occurred during JSON serialization.
-    Serialize(EncoderError),
-    /// An error occurred during JSON deserialization.
-    Deserialize(DecoderError),
+    /// An error occurred during JSON serialization or deserialization.
+    Json(serde_json::Error),
     /// An error occurred during preferences file I/O.
     Io(io::Error),
     /// Couldn't figure out where to put or find the serialized data.
     Directory(AppDirsError),
 }
 
-impl From<EncoderError> for PreferencesError {
-    fn from(e: EncoderError) -> Self {
-        PreferencesError::Serialize(e)
+impl fmt::Display for PreferencesError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use PreferencesError::*;
+        match *self {
+            Json(ref e) => e.fmt(f),
+            Io(ref e) => e.fmt(f),
+            Directory(ref e) => e.fmt(f),
+        }
     }
 }
 
-impl From<DecoderError> for PreferencesError {
-    fn from(e: DecoderError) -> Self {
-        PreferencesError::Deserialize(e)
+impl std::error::Error for PreferencesError {
+    fn description(&self) -> &str {
+        use PreferencesError::*;
+        match *self {
+            Json(ref e) => e.description(),
+            Io(ref e) => e.description(),
+            Directory(ref e) => e.description(),
+        }
+    }
+    fn cause(&self) -> Option<&std::error::Error> {
+        use PreferencesError::*;
+        Some(match *self {
+            Json(ref e) => e,
+            Io(ref e) => e,
+            Directory(ref e) => e,
+        })
+    }
+}
+
+impl From<serde_json::Error> for PreferencesError {
+    fn from(e: serde_json::Error) -> Self {
+        PreferencesError::Json(e)
     }
 }
 
@@ -257,8 +271,8 @@ impl From<AppDirsError> for PreferencesError {
 /// Trait for types that can be saved & loaded as user data.
 ///
 /// This type is automatically implemented for any struct/enum `T` which implements both
-/// `Encodable` and `Decodable` (from `rustc-serialize`). (Trivially, you can annotate the type
-/// with `#[derive(RustcEncodable, RustcDecodable)`). It is encouraged to use the provided
+/// `Serialize` and `Deserialize` (from `serde`). (Trivially, you can annotate the type
+/// with `#[derive(Serialize, Deserialize)`). It is encouraged to use the provided
 /// type, [`PreferencesMap`](type.PreferencesMap.html), to bundle related user preferences.
 ///
 /// For the `app` parameter of `save(..)` and `load(..)`, it's recommended that you use a single
@@ -302,14 +316,14 @@ pub trait Preferences: Sized {
 }
 
 fn compute_file_path<S: AsRef<str>>(app: &AppInfo, key: S) -> Result<PathBuf, PreferencesError> {
-    let mut path = try!(get_app_dir(DATA_TYPE, app, key.as_ref()));
+    let mut path = get_app_dir(DATA_TYPE, app, key.as_ref())?;
     let new_name = match path.file_name() {
-        Some(name) if name.len() > 0 => {
+        Some(name) if name.is_empty() => {
             let mut new_name = OsString::with_capacity(name.len() + PREFS_FILE_EXTENSION.len());
             new_name.push(name);
             new_name.push(PREFS_FILE_EXTENSION);
             new_name
-        },
+        }
         _ => DEFAULT_PREFS_FILENAME.into(),
     };
     path.set_file_name(new_name);
@@ -317,32 +331,26 @@ fn compute_file_path<S: AsRef<str>>(app: &AppInfo, key: S) -> Result<PathBuf, Pr
 }
 
 impl<T> Preferences for T
-    where T: Encodable + Decodable + Sized
+    where T: Serialize + Deserialize + Sized
 {
     fn save<S>(&self, app: &AppInfo, key: S) -> Result<(), PreferencesError>
         where S: AsRef<str>
     {
-        let path = try!(compute_file_path(app, key.as_ref()));
+        let path = compute_file_path(app, key.as_ref())?;
         path.parent().map(create_dir_all);
-        let mut file = try!(File::create(path));
+        let mut file = File::create(path)?;
         self.save_to(&mut file)
     }
     fn load<S: AsRef<str>>(app: &AppInfo, key: S) -> Result<Self, PreferencesError> {
-        let path = try!(compute_file_path(app, key.as_ref()));
-        let mut file = try!(File::open(path));
+        let path = compute_file_path(app, key.as_ref())?;
+        let mut file = File::open(path)?;
         Self::load_from(&mut file)
     }
     fn save_to<W: Write>(&self, writer: &mut W) -> Result<(), PreferencesError> {
-        let encoded = try!(json::encode(self));
-        try!(writer.write_all(encoded.as_bytes()));
-        try!(writer.flush());
-        Ok(())
+        serde_json::to_writer(writer, self).map_err(Into::into)
     }
     fn load_from<R: Read>(reader: &mut R) -> Result<Self, PreferencesError> {
-        let mut bytes = Vec::new();
-        try!(reader.read_to_end(&mut bytes));
-        let encoded = try!(String::from_utf8(bytes));
-        json::decode(&encoded).map_err(|e| e.into())
+        serde_json::from_reader(reader).map_err(Into::into)
     }
 }
 
@@ -358,7 +366,10 @@ pub fn prefs_base_dir() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use {AppInfo, Preferences, PreferencesMap};
-    const APP_INFO: AppInfo = AppInfo{name: "preferences", author: "Rust language community"};
+    const APP_INFO: AppInfo = AppInfo {
+        name: "preferences",
+        author: "Rust language community",
+    };
     const TEST_PREFIX: &'static str = "tests/module";
     fn gen_test_name(name: &str) -> String {
         TEST_PREFIX.to_owned() + "/" + name
