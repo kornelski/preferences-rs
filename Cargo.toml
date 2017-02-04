@@ -1,15 +1,19 @@
 [package]
 name = "preferences"
-version = "0.7.3"
+version = "1.0.0"
 authors = ["Andy Barron <AndrewLBarron@gmail.com>"]
 
 description = "Read and write user-specific application data (in stable Rust)"
 documentation = "https://andybarron.github.io/preferences"
-repository = "https://github.com/AndyBarron/preferences-rs"
+repository = "https://docs.rs/preferences"
 readme = "README.md"
 keywords = ["preferences", "user", "data", "persistent", "storage"]
 license = "MIT"
 
 [dependencies]
 app_dirs = "^1.1.1"
-rustc-serialize = "^0.3.19"
+serde = "^0.9.6"
+serde_json = "^0.9.5"
+
+[dev-dependencies]
+serde_derive = "^0.9.6"
