@@ -11,4 +11,4 @@ https://docs.rs/preferences
 ## Installation
 Add the following to your `Cargo.toml`:
 
-`preferences = "^1.0.0"`
+`preferences = "^1.1.0"`
