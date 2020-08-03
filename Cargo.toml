@@ -11,7 +11,7 @@ keywords = ["preferences", "user", "data", "persistent", "storage"]
 license = "MIT"
 
 [dependencies]
-app_dirs2 = "2"
+app_dirs = { version = "2", package = "app_dirs2" }
 serde = "^0.9.6"
 serde_json = "^0.9.5"
 
